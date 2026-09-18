@@ -14,6 +14,12 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    /* Path alias — keep in sync with resolve.alias in vite.config.ts.
+       TypeScript 7 removed `baseUrl`, so `paths` resolve relative to this file. */
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,

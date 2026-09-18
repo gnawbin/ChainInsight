@@ -22,6 +22,10 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Local keypair support (see src/keypair.rs). `ed25519-dalek` is deliberately
+# used instead of the far heavier `solana-sdk`, which would dominate build time.
+ed25519-dalek = "2"
+bs58 = "0.5"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
