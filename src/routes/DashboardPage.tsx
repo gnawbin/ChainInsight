@@ -1,6 +1,7 @@
 import { useClient, useRequest } from "@solana/react";
-import { ActivityIcon, CoinsIcon, HashIcon, LayersIcon } from "lucide-react";
+import { ActivityIcon, CoinsIcon, HashIcon, LayersIcon, RefreshCwIcon } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber, formatSol, groupDigits, shortenAddress } from "@/lib/format";
@@ -13,10 +14,15 @@ import { useSignerInfo } from "@/solana/useSignerInfo";
 function StatCard({
   title,
   icon,
+  error,
+  onRetry,
   children,
 }: {
   title: string;
   icon: React.ReactNode;
+  /** Truthy when the underlying read failed; renders the error affordance. */
+  error?: unknown;
+  onRetry?: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -27,7 +33,22 @@ function StatCard({
           {title}
         </CardTitle>
       </CardHeader>
-      <CardContent className="text-2xl font-semibold">{children}</CardContent>
+      <CardContent className="text-2xl font-semibold">
+        {error ? (
+          // Without this branch a failed request would pulse a skeleton forever.
+          <span className="flex items-center gap-1 text-base font-normal">
+            <span className="text-negative">Unavailable</span>
+            {onRetry === undefined ? null : (
+              <Button variant="ghost" size="sm" className="gap-1.5" onClick={onRetry}>
+                <RefreshCwIcon className="size-3.5" />
+                Retry
+              </Button>
+            )}
+          </span>
+        ) : (
+          children
+        )}
+      </CardContent>
     </Card>
   );
 }
@@ -57,15 +78,20 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title="SOL Balance" icon={<CoinsIcon className="size-4" />}>
+        <StatCard
+          title="SOL Balance"
+          icon={<CoinsIcon className="size-4" />}
+          // Only surface an error once a signer exists; otherwise the card's job
+          // is to prompt for a connection.
+          error={canSign ? balance.error : undefined}
+          onRetry={() => balance.refresh()}
+        >
           {!canSign ? (
             <span className="text-base font-normal text-muted-foreground">
               {mode === "wallet" ? "Connect a wallet" : "No local keypair"}
             </span>
           ) : balance.status === "loading" ? (
             <Skeleton className="h-8 w-32" />
-          ) : balance.error ? (
-            <span className="text-base font-normal text-negative">Unavailable</span>
           ) : balance.data ? (
             <span>
               {groupDigits(formatSol(balance.data.value, 4))}
@@ -74,7 +100,12 @@ export function DashboardPage() {
           ) : null}
         </StatCard>
 
-        <StatCard title="Epoch" icon={<LayersIcon className="size-4" />}>
+        <StatCard
+          title="Epoch"
+          icon={<LayersIcon className="size-4" />}
+          error={epoch.error}
+          onRetry={() => epoch.refresh()}
+        >
           {epoch.status === "success" && epoch.data ? (
             <>
               {formatNumber(Number(epoch.data.epoch))}
@@ -92,7 +123,12 @@ export function DashboardPage() {
           )}
         </StatCard>
 
-        <StatCard title="Block Height" icon={<HashIcon className="size-4" />}>
+        <StatCard
+          title="Block Height"
+          icon={<HashIcon className="size-4" />}
+          error={blockHeight.error}
+          onRetry={() => blockHeight.refresh()}
+        >
           {blockHeight.status === "success" && blockHeight.data !== undefined ? (
             formatNumber(Number(blockHeight.data))
           ) : (
@@ -100,7 +136,12 @@ export function DashboardPage() {
           )}
         </StatCard>
 
-        <StatCard title="Cluster Version" icon={<ActivityIcon className="size-4" />}>
+        <StatCard
+          title="Cluster Version"
+          icon={<ActivityIcon className="size-4" />}
+          error={version.error}
+          onRetry={() => version.refresh()}
+        >
           {version.status === "success" && version.data ? (
             <span className="font-mono text-lg">{version.data["solana-core"]}</span>
           ) : (

@@ -14,6 +14,11 @@ interface ImportMetaEnv {
   readonly VITE_SOLANA_RPC_URL?: string;
   /** Optional websocket endpoint override; falls back to `VITE_SOLANA_RPC_URL`. */
   readonly VITE_SOLANA_WS_URL?: string;
+  /**
+   * Dev-only: force the signer backend. `desktop` in a plain browser makes the
+   * Tauri commands fail, which is how the desktop error path is tested.
+   */
+  readonly VITE_FORCE_SIGNER_MODE?: string;
 }
 
 interface ImportMeta {

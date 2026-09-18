@@ -86,12 +86,28 @@ pnpm install
 # Browser (wallet extensions work here) — http://localhost:1420
 pnpm dev
 
-# Desktop shell (local keypair; no wallet extensions)
+# Desktop shell — needs a local keypair first, see below
 pnpm tauri dev
 
 # Production build
 pnpm build
 ```
+
+### Desktop mode requires a keypair
+
+The Tauri build signs with a local Solana CLI keypair. Without one, the client
+cannot be built and the app shows a recovery screen (see
+[When the client cannot start](#when-the-client-cannot-start)):
+
+```sh
+solana-keygen new --no-bip39-passphrase   # writes ~/.config/solana/id.json
+```
+
+The keypair is looked up in this order, the CLI location winning when both exist:
+
+1. `~/.config/solana/id.json` — what `solana-keygen` writes
+2. `~/.solana-defi-demo/id.json` — where the app's own **Create a demo keypair**
+   button writes
 
 ### Running against a local cluster
 
@@ -111,6 +127,32 @@ solana-test-validator --reset      # or: surfpool start
 
 Only `VITE_`-prefixed values are inlined into the bundle — **never put secrets in
 `.env`**, they ship to the client.
+
+### Dev-only overrides
+
+The signer backend and the shell can be forced with query parameters. These are
+compiled out of production builds (`import.meta.env.DEV`):
+
+| URL | Effect |
+| --- | --- |
+| `/?mode=desktop` | Use the local-keypair backend inside a plain browser |
+| `/?mode=wallet` | Use the browser-wallet backend even inside Tauri |
+| `/?shell=tauri` | Pretend the host is Tauri, so Tauri-only UI renders |
+
+`?mode=desktop` in a browser makes the Tauri commands fail, which reproduces the
+desktop failure path — that is how the recovery screen is regression-tested
+without building the Tauri app.
+
+### When the client cannot start
+
+If the Kit client fails to build, the app shows a recovery screen instead of a
+blank window — with the underlying error, **Retry**, **Use browser wallet
+instead**, and (inside Tauri) **Create a demo keypair**.
+
+The blank window was a real bug: a rejected async client surfaces as a *render
+error* from `ClientProvider`, and with no error boundary React unmounts the whole
+root. `src/components/ErrorBoundary.tsx` is what prevents that, so any failure
+stays visible instead of emptying the window.
 
 ---
 

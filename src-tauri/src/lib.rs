@@ -8,6 +8,7 @@ pub fn run() {
             keypair::read_keypair,
             keypair::local_address,
             keypair::sign_message,
+            keypair::create_keypair,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
