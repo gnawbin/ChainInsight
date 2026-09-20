@@ -1,3 +1,4 @@
+import { Loader, Stack, Text } from "@mantine/core";
 import { ClientProvider } from "@solana/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Suspense, useCallback, useMemo, useState, type PropsWithChildren } from "react";
@@ -36,12 +37,12 @@ const queryClient = new QueryClient({
 
 function ClientBootFallback() {
   return (
-    <div className="flex h-svh items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-3">
-        <div className="size-8 animate-spin rounded-full border-2 border-muted border-t-primary" />
-        <p className="text-sm text-muted-foreground">Connecting to Solana…</p>
-      </div>
-    </div>
+    <Stack align="center" justify="center" mih="100svh" gap="sm">
+      <Loader />
+      <Text size="sm" c="dimmed">
+        Connecting to Solana…
+      </Text>
+    </Stack>
   );
 }
 

@@ -1,19 +1,10 @@
-import { useState } from "react";
+import { Alert, Avatar, Button, Group, Loader, Menu, Modal, Stack, Text } from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
+import { notifications } from "@mantine/notifications";
 import { WalletIcon } from "lucide-react";
 import { useClient } from "@solana/react";
 import { useConnect, useDisconnect, useWallets } from "@solana/kit-plugin-wallet/react";
-import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Skeleton } from "@/components/ui/skeleton";
 import { shortenAddress } from "@/lib/format";
 import type { AppClient } from "@/solana/client";
 import { useSignerInfo } from "@/solana/useSignerInfo";
@@ -24,13 +15,21 @@ import { useSignerInfo } from "@/solana/useSignerInfo";
  */
 type DiscoveredWallet = ReturnType<typeof useWallets>[number];
 
+function reportError(title: string, error: unknown) {
+  notifications.show({
+    color: "red",
+    title,
+    message: error instanceof Error ? error.message : String(error),
+  });
+}
+
 /**
- * One button for both signer modes.
+ * One control for both signer modes.
  *
  * In a browser it opens wallet discovery and connects via Wallet Standard. In the
  * Tauri shell there is nothing to discover (extensions are not loaded into the
- * webview), so it renders the local keypair address instead — the UI does not
- * need to branch, because `useSignerInfo` already resolved which backend is live.
+ * webview), so it shows the local keypair address instead — the UI does not need
+ * to branch, because `useSignerInfo` already resolved which backend is live.
  */
 export function WalletButton() {
   const client = useClient<AppClient>();
@@ -38,17 +37,15 @@ export function WalletButton() {
   const wallets = useWallets(client);
   const connect = useConnect(client);
   const disconnect = useDisconnect(client);
-  const [open, setOpen] = useState(false);
+  const [opened, { open, close }] = useDisclosure(false);
 
   async function handleConnect(wallet: DiscoveredWallet) {
     try {
       // `dispatchAsync` propagates failures, unlike fire-and-forget `dispatch`.
       await connect.dispatchAsync(wallet);
-      setOpen(false);
+      close();
     } catch (error) {
-      toast.error("Could not connect", {
-        description: error instanceof Error ? error.message : String(error),
-      });
+      reportError("Could not connect", error);
     }
   }
 
@@ -56,16 +53,13 @@ export function WalletButton() {
     try {
       await disconnect.dispatchAsync();
     } catch (error) {
-      toast.error("Could not disconnect", {
-        description: error instanceof Error ? error.message : String(error),
-      });
+      reportError("Could not disconnect", error);
     }
   }
 
   if (mode === "desktop") {
     return (
-      <Button variant="outline" size="sm" className="gap-2 font-mono text-xs">
-        <WalletIcon />
+      <Button variant="default" size="sm" leftSection={<WalletIcon size={16} />}>
         {address === null ? "Loading keypair…" : shortenAddress(address, 4)}
       </Button>
     );
@@ -73,57 +67,74 @@ export function WalletButton() {
 
   if (ready && address !== null) {
     return (
-      <Button variant="outline" size="sm" onClick={handleDisconnect} className="gap-2 font-mono text-xs">
-        <WalletIcon />
-        {shortenAddress(address, 4)}
-      </Button>
+      <Menu position="bottom-end" withArrow>
+        <Menu.Target>
+          <Button variant="default" size="sm" leftSection={<WalletIcon size={16} />}>
+            {shortenAddress(address, 4)}
+          </Button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Label>Connected</Menu.Label>
+          <Menu.Item disabled leftSection={<WalletIcon size={14} />}>
+            {shortenAddress(address, 8)}
+          </Menu.Item>
+          <Menu.Divider />
+          <Menu.Item color="red" onClick={() => void handleDisconnect()}>
+            Disconnect
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
     );
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="gap-2">
-          <WalletIcon />
-          Connect Wallet
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Connect a wallet</DialogTitle>
-          <DialogDescription>
-            Wallets are discovered through the Wallet Standard, so no adapter package is needed.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Button size="sm" leftSection={<WalletIcon size={16} />} onClick={open}>
+        Connect Wallet
+      </Button>
 
-        <div className="flex flex-col gap-2">
+      <Modal opened={opened} onClose={close} title="Connect a wallet" centered>
+        <Stack gap="sm">
+          <Text size="sm" c="dimmed">
+            Wallets are discovered through the Wallet Standard, so no adapter package is needed.
+          </Text>
+
           {wallets.length === 0 ? (
-            <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+            <Alert color="gray" variant="light">
               No wallets detected. Install a Solana browser extension (Phantom, Solflare, Backpack)
               and reload the page.
-            </p>
+            </Alert>
           ) : (
             wallets.map((wallet) => (
               <Button
                 key={wallet.name}
-                variant="outline"
-                className="justify-start gap-3"
+                variant="default"
+                justify="flex-start"
                 disabled={connect.isRunning}
+                leftSection={
+                  wallet.icon ? (
+                    <Avatar src={wallet.icon} size={20} radius="sm" alt="" />
+                  ) : (
+                    <WalletIcon size={20} />
+                  )
+                }
                 onClick={() => void handleConnect(wallet)}
               >
-                {wallet.icon ? (
-                  <img src={wallet.icon} alt="" className="size-5 rounded-sm" />
-                ) : (
-                  <WalletIcon className="size-5" />
-                )}
                 {wallet.name}
               </Button>
             ))
           )}
-        </div>
 
-        {connect.isRunning ? <Skeleton className="h-4 w-40" /> : null}
-      </DialogContent>
-    </Dialog>
+          {connect.isRunning ? (
+            <Group gap="xs">
+              <Loader size={16} />
+              <Text size="sm" c="dimmed">
+                Waiting for the wallet…
+              </Text>
+            </Group>
+          ) : null}
+        </Stack>
+      </Modal>
+    </>
   );
 }

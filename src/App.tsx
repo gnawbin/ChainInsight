@@ -1,8 +1,7 @@
+import { Notifications } from "@mantine/notifications";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
-import { Toaster } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { DashboardPage } from "@/routes/DashboardPage";
 import { SettingsPage } from "@/routes/SettingsPage";
 import { TransferPage } from "@/routes/TransferPage";
@@ -14,7 +13,7 @@ import { TransferPage } from "@/routes/TransferPage";
  */
 export function App() {
   return (
-    <TooltipProvider>
+    <>
       <HashRouter>
         <Routes>
           <Route element={<AppShell />}>
@@ -25,7 +24,9 @@ export function App() {
           </Route>
         </Routes>
       </HashRouter>
-      <Toaster />
-    </TooltipProvider>
+
+      {/* Transaction feedback surface, mounted once for the whole app. */}
+      <Notifications position="top-right" />
+    </>
   );
 }

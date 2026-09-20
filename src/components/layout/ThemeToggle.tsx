@@ -1,19 +1,25 @@
+import { ActionIcon, useComputedColorScheme, useMantineColorScheme } from "@mantine/core";
 import { MoonIcon, SunIcon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { useTheme } from "@/hooks/useTheme";
-
+/**
+ * Toggles the Mantine colour scheme.
+ *
+ * Replaces the previous hand-rolled `useTheme` hook — Mantine persists the choice
+ * itself and keeps `document` attributes in sync.
+ */
 export function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
+  const { setColorScheme } = useMantineColorScheme();
+  const computed = useComputedColorScheme("dark");
+  const isDark = computed === "dark";
 
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={toggleTheme}
-      aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+    <ActionIcon
+      variant="default"
+      size="lg"
+      aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
+      onClick={() => setColorScheme(isDark ? "light" : "dark")}
     >
-      {theme === "dark" ? <SunIcon /> : <MoonIcon />}
-    </Button>
+      {isDark ? <SunIcon size={16} /> : <MoonIcon size={16} />}
+    </ActionIcon>
   );
 }

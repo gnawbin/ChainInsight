@@ -1,11 +1,10 @@
+import { Button, Card, Group, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title } from "@mantine/core";
 import { useClient, useRequest } from "@solana/react";
 import { ActivityIcon, CoinsIcon, HashIcon, LayersIcon, RefreshCwIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import { formatNumber, formatSol, groupDigits, shortenAddress } from "@/lib/format";
 import { useSolBalance } from "@/hooks/useSolBalance";
+import { formatNumber, formatSol, groupDigits, shortenAddress } from "@/lib/format";
 import type { AppClient } from "@/solana/client";
 import { CLUSTERS } from "@/solana/cluster";
 import { useSolanaConfig } from "@/solana/config-context";
@@ -19,37 +18,57 @@ function StatCard({
   children,
 }: {
   title: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   /** Truthy when the underlying read failed; renders the error affordance. */
   error?: unknown;
   onRetry?: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <Card className="gap-3 py-5">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+    <Card withBorder padding="lg" radius="md">
+      <Group gap="xs" mb="sm" wrap="nowrap">
+        <ThemeIcon variant="light" size="sm" radius="sm">
           {icon}
+        </ThemeIcon>
+        <Text size="sm" fw={500} c="dimmed">
           {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="text-2xl font-semibold">
-        {error ? (
-          // Without this branch a failed request would pulse a skeleton forever.
-          <span className="flex items-center gap-1 text-base font-normal">
-            <span className="text-negative">Unavailable</span>
-            {onRetry === undefined ? null : (
-              <Button variant="ghost" size="sm" className="gap-1.5" onClick={onRetry}>
-                <RefreshCwIcon className="size-3.5" />
-                Retry
-              </Button>
-            )}
-          </span>
-        ) : (
-          children
-        )}
-      </CardContent>
+        </Text>
+      </Group>
+
+      {error ? (
+        // Without this branch a failed request would pulse a skeleton forever.
+        <Group gap="xs">
+          <Text c="red" size="sm">
+            Unavailable
+          </Text>
+          {onRetry === undefined ? null : (
+            <Button
+              variant="subtle"
+              size="compact-xs"
+              leftSection={<RefreshCwIcon size={14} />}
+              onClick={onRetry}
+            >
+              Retry
+            </Button>
+          )}
+        </Group>
+      ) : (
+        children
+      )}
     </Card>
+  );
+}
+
+function Field({ label, value, mono = false }: { label: string; value: ReactNode; mono?: boolean }) {
+  return (
+    <div>
+      <Text size="xs" c="dimmed">
+        {label}
+      </Text>
+      <Text size="sm" fw={500} ff={mono ? "monospace" : undefined}>
+        {value}
+      </Text>
+    </div>
   );
 }
 
@@ -68,117 +87,118 @@ export function DashboardPage() {
   const canSign = ready && address !== null;
 
   return (
-    <div className="flex flex-col gap-6">
+    <Stack gap="lg">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">
-          Live data straight from the {cluster.label} cluster via{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">@solana/kit</code>.
-        </p>
+        <Title order={2}>Dashboard</Title>
+        <Text size="sm" c="dimmed">
+          Live data straight from the {cluster.label} cluster via <code>@solana/kit</code>.
+        </Text>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <SimpleGrid cols={{ base: 1, sm: 2, xl: 4 }} spacing="md">
         <StatCard
           title="SOL Balance"
-          icon={<CoinsIcon className="size-4" />}
+          icon={<CoinsIcon size={14} />}
           // Only surface an error once a signer exists; otherwise the card's job
           // is to prompt for a connection.
           error={canSign ? balance.error : undefined}
           onRetry={() => balance.refresh()}
         >
           {!canSign ? (
-            <span className="text-base font-normal text-muted-foreground">
+            <Text size="sm" c="dimmed">
               {mode === "wallet" ? "Connect a wallet" : "No local keypair"}
-            </span>
+            </Text>
           ) : balance.status === "loading" ? (
-            <Skeleton className="h-8 w-32" />
+            <Skeleton height={28} width={"60%"} />
           ) : balance.data ? (
-            <span>
-              {groupDigits(formatSol(balance.data.value, 4))}
-              <span className="ml-1 text-sm font-normal text-muted-foreground">SOL</span>
-            </span>
+            <Group gap={6} align="baseline">
+              <Text fz="xl" fw={600}>
+                {groupDigits(formatSol(balance.data.value, 4))}
+              </Text>
+              <Text size="sm" c="dimmed">
+                SOL
+              </Text>
+            </Group>
           ) : null}
         </StatCard>
 
         <StatCard
           title="Epoch"
-          icon={<LayersIcon className="size-4" />}
+          icon={<LayersIcon size={14} />}
           error={epoch.error}
           onRetry={() => epoch.refresh()}
         >
           {epoch.status === "success" && epoch.data ? (
-            <>
-              {formatNumber(Number(epoch.data.epoch))}
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
+            <Group gap={6} align="baseline">
+              <Text fz="xl" fw={600}>
+                {formatNumber(Number(epoch.data.epoch))}
+              </Text>
+              <Text size="sm" c="dimmed">
                 {/* EpochInfo exposes slotIndex/slotsInEpoch rather than a ratio. */}
                 {formatNumber(
                   (Number(epoch.data.slotIndex) / Number(epoch.data.slotsInEpoch)) * 100,
                   1,
                 )}
                 %
-              </span>
-            </>
+              </Text>
+            </Group>
           ) : (
-            <Skeleton className="h-8 w-24" />
+            <Skeleton height={28} width={"45%"} />
           )}
         </StatCard>
 
         <StatCard
           title="Block Height"
-          icon={<HashIcon className="size-4" />}
+          icon={<HashIcon size={14} />}
           error={blockHeight.error}
           onRetry={() => blockHeight.refresh()}
         >
           {blockHeight.status === "success" && blockHeight.data !== undefined ? (
-            formatNumber(Number(blockHeight.data))
+            <Text fz="xl" fw={600}>
+              {formatNumber(Number(blockHeight.data))}
+            </Text>
           ) : (
-            <Skeleton className="h-8 w-28" />
+            <Skeleton height={28} width={"50%"} />
           )}
         </StatCard>
 
         <StatCard
           title="Cluster Version"
-          icon={<ActivityIcon className="size-4" />}
+          icon={<ActivityIcon size={14} />}
           error={version.error}
           onRetry={() => version.refresh()}
         >
           {version.status === "success" && version.data ? (
-            <span className="font-mono text-lg">{version.data["solana-core"]}</span>
+            <Text fz="lg" fw={600} ff="monospace">
+              {version.data["solana-core"]}
+            </Text>
           ) : (
-            <Skeleton className="h-8 w-24" />
+            <Skeleton height={28} width={"45%"} />
           )}
         </StatCard>
-      </div>
+      </SimpleGrid>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Signer</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
-          <div>
-            <p className="text-muted-foreground">Source</p>
-            <p className="font-medium">
-              {mode === "wallet" ? "Wallet Standard extension" : "Local Solana CLI keypair"}
-            </p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Address</p>
-            <p className="font-mono">
-              {address === null ? "—" : shortenAddress(address, 8)}
-            </p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">RPC endpoint</p>
-            <p className="truncate font-mono text-xs">{cluster.defaultRpcUrl}</p>
-          </div>
-          <div>
-            <p className="text-muted-foreground">Status</p>
-            <p className="font-medium">
-              {mode === "desktop" ? "Local keypair ready" : ready ? "Connected" : "Disconnected"}
-            </p>
-          </div>
-        </CardContent>
+      <Card withBorder padding="lg" radius="md">
+        <Title order={4} mb="md">
+          Signer
+        </Title>
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          <Field
+            label="Source"
+            value={mode === "wallet" ? "Wallet Standard extension" : "Local Solana CLI keypair"}
+          />
+          <Field
+            label="Address"
+            mono
+            value={address === null ? "—" : shortenAddress(address, 8)}
+          />
+          <Field label="RPC endpoint" value={cluster.defaultRpcUrl} mono />
+          <Field
+            label="Status"
+            value={mode === "desktop" ? "Local keypair ready" : ready ? "Connected" : "Disconnected"}
+          />
+        </SimpleGrid>
       </Card>
-    </div>
+    </Stack>
   );
 }

@@ -16,12 +16,13 @@ webview (signing with a local Solana CLI keypair), chosen at runtime.
 | Shell | Tauri | 2 |
 | UI framework | React + Vite | 19.3 · 8.3 |
 | Language | TypeScript | 7.0 |
-| Styling | Tailwind CSS + shadcn/ui primitives | 4.3 · `radix-ui` 1.6 |
+| UI components | Mantine (`core`/`hooks`/`form`/`notifications`/`charts`) | 9.6.1 |
+| Styling pipeline | Mantine CSS + `postcss-preset-mantine` | 1.18 |
 | Solana SDK | `@solana/kit` + plugins | 8.3 · 0.19/0.20 |
 | React bindings | `@solana/react` | 8.3 |
 | Routing | `react-router-dom` (`HashRouter`) | 7.18 |
 | Data cache | `@tanstack/react-query` | 5.103 |
-| Toasts / charts | `sonner` · `recharts` | 2.0 · 3.10 |
+| Icons / charts backend | `lucide-react` · `recharts` | 1.47 · 3.10 |
 
 Web3.js v1 is deliberately **not** used: Kit is browser-native and needs no
 `Buffer`/`process` polyfills in a Vite build.
@@ -75,6 +76,30 @@ can be shipped to Rust. `src/solana/desktop-signer.ts` implements that interface
 > `~/.solana-defi-demo`. Without that allowlist the command would be an
 > arbitrary-file-read primitive reachable from any XSS in the webview. Unit tests
 > cover this (`pnpm test:rust`).
+
+### UI layer
+
+Everything visual comes from **Mantine 9** — there is no second styling system:
+
+| Concern | Solution |
+| --- | --- |
+| Providers | `MantineProvider` (`defaultColorScheme="dark"`, `teal` accent) in `main.tsx` |
+| Layout | Mantine's `AppShell` — the collapsible navbar is built in, so there is no separate mobile navigation |
+| Forms | `@mantine/form` (`useForm` + `validate`); `TransferPage` validates address and amount this way |
+| Amount input | `NumberInput` (built on `react-number-format`): `decimalScale={9}`, `thousandSeparator` |
+| Feedback | `@mantine/notifications` (`notifications.show`) |
+| Theme toggle | `useMantineColorScheme` — Mantine persists the choice itself |
+| Icons | `lucide-react` (Mantine is icon-library agnostic) |
+
+`postcss.config.cjs` is required by Mantine (`postcss-preset-mantine` plus the
+breakpoint variables). Tailwind was **removed** during the Mantine migration
+rather than run alongside it, so there is exactly one styling system.
+
+> **Cost of that choice, measured:** the production bundle went from 40 KB CSS /
+> 548 KB JS (Tailwind + hand-written shadcn primitives) to **249 KB CSS /
+> 737 KB JS** — 36 KB / 226 KB gzipped. Mantine ships a complete stylesheet
+> instead of generating only the classes in use. For a Tauri app these are local
+> files, so the trade is convenience for byte count.
 
 ---
 
@@ -191,10 +216,15 @@ src/
 │   ├── config-context.ts   # cluster/mode context
 │   ├── SolanaProvider.tsx  # ClientProvider + QueryClientProvider + Suspense
 │   └── useSignerInfo.ts    # single source of truth for "who signs?"
-├── components/{ui,layout,wallet}/
+├── components/
+│   ├── layout/             # AppShell, NetworkBadge, ThemeToggle
+│   ├── wallet/             # WalletButton
+│   ├── ClientErrorScreen.tsx
+│   └── ErrorBoundary.tsx   # keeps failures visible instead of blanking
 ├── routes/                 # Dashboard, Transfer, Settings
-├── hooks/                  # useSolBalance, useTheme
-└── lib/                    # env, format (BigInt-safe), cn
+├── hooks/                  # useSolBalance
+└── lib/                    # env, format (BigInt-safe)
+postcss.config.cjs          # required by Mantine
 scripts/smoke-kit.mjs
 src-tauri/src/keypair.rs
 ```
@@ -207,15 +237,12 @@ src-tauri/src/keypair.rs
   lending flow is the natural next feature. Jupiter's quote API is the
   smallest-dependency option; an Anchor program under `programs/` is the other
   (the toolchain — `anchor-cli 1.1.2`, `solana-cli 3.1.10`, Surfpool — is present).
-- The JS bundle is a single ~556 kB chunk. Split routes with `React.lazy` before
+- The JS bundle is a single ~737 kB chunk. Split routes with `React.lazy` before
   adding larger feature pages.
-- `tauri.conf.json` still has `"csp": null`. Tighten `connect-src` to the chosen
-  RPC endpoints.
+- `tauri.conf.json` still has `"csp": null`. When tightening it, keep
+  `style-src 'unsafe-inline'`: Mantine injects CSS custom properties inline.
 - Wallet persistence uses a namespaced `localStorage` key
   (`solana-defi-demo:wallet`) through the wallet plugin's `storageKey` option.
-- Tailwind/shadcn components were **hand-written** rather than generated: the
-  `shadcn` CLI currently crashes in this environment
-  (`@modelcontextprotocol/sdk` → `zod/v3` resolution error). `components.json` is
-  in place, so `pnpm dlx shadcn@latest add <component>` should work wherever the
-  CLI runs.
+- `@mantine/charts` is installed (and its stylesheet imported) but no chart is
+  rendered yet — it is wired up for the first TVL/price view.
 

@@ -1,8 +1,19 @@
-import { AlertTriangleIcon, KeyRoundIcon, Loader2Icon, RefreshCwIcon, WalletIcon } from "lucide-react";
+import {
+  Alert,
+  Button,
+  Card,
+  Code,
+  Group,
+  List,
+  Loader,
+  Stack,
+  Text,
+  ThemeIcon,
+  Title,
+} from "@mantine/core";
+import { AlertTriangleIcon, KeyRoundIcon, RefreshCwIcon, WalletIcon } from "lucide-react";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SignerMode } from "@/solana/signer";
 
 export type ClientErrorScreenProps = Readonly<{
@@ -85,102 +96,99 @@ export function ClientErrorScreen({
   }
 
   return (
-    <div className="flex min-h-svh items-center justify-center bg-background p-6">
-      <Card className="w-full max-w-2xl">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertTriangleIcon className="size-5 text-negative" />
-            Could not start the Solana client
-          </CardTitle>
-          <CardDescription>
-            {unavailableOutsideShell
-              ? "Desktop signing runs through Tauri commands, which do not exist in a browser tab."
-              : isMissingKeypair
-                ? "The desktop build signs with a local Solana CLI keypair, and reading it failed."
-                : "The wallet-backed client failed to initialise."}
-          </CardDescription>
-        </CardHeader>
+    <Stack align="center" justify="center" mih="100svh" p="md">
+      <Card w="100%" maw={720} withBorder shadow="md" padding="lg">
+        <Group gap="sm" mb="xs">
+          <ThemeIcon color="red" variant="light" size="lg">
+            <AlertTriangleIcon size={18} />
+          </ThemeIcon>
+          <Title order={4}>Could not start the Solana client</Title>
+        </Group>
 
-        <CardContent className="flex flex-col gap-4">
+        <Text c="dimmed" size="sm" mb="md">
+          {unavailableOutsideShell
+            ? "Desktop signing runs through Tauri commands, which do not exist in a browser tab."
+            : isMissingKeypair
+              ? "The desktop build signs with a local Solana CLI keypair, and reading it failed."
+              : "The wallet-backed client failed to initialise."}
+        </Text>
+
+        <Stack gap="md">
           {unavailableOutsideShell ? (
-            <p className="flex items-start gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-              <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
-              <span>
-                The signer backend is set to <strong>local keypair</strong>, but this host has no
-                Tauri runtime — so no keypair can be read, and creating one would not help. Switch
-                the backend below, or run <code className="text-xs">pnpm tauri dev</code>.
-              </span>
-            </p>
+            <Alert color="yellow" variant="light" icon={<AlertTriangleIcon size={16} />}>
+              The signer backend is set to <strong>local keypair</strong>, but this host has no Tauri
+              runtime — so no keypair can be read, and creating one would not help. Switch the
+              backend below, or run <Code>pnpm tauri dev</Code>.
+            </Alert>
           ) : null}
 
-          <div className="rounded-md border bg-muted/40 p-3">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <Card withBorder bg="var(--mantine-color-default-hover)" padding="sm">
+            <Text size="xs" tt="uppercase" fw={500} c="dimmed" mb={4}>
               Error
-            </p>
-            <code className="block whitespace-pre-wrap break-all font-mono text-xs">
+            </Text>
+            <Code block style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
               {describe(error)}
-            </code>
-          </div>
+            </Code>
+          </Card>
 
           {isMissingKeypair && !unavailableOutsideShell ? (
-            <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-              <p className="flex items-center gap-2 font-medium text-foreground">
-                <KeyRoundIcon className="size-4" />
-                Options
-              </p>
-              <ol className="ml-6 list-decimal space-y-1">
-                <li>
-                  Generate a keypair with{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                    solana-keygen new --no-bip39-passphrase
-                  </code>{" "}
-                  (writes <code className="text-xs">~/.config/solana/id.json</code>), or
-                </li>
-                <li>
-                  place an existing keypair at{" "}
-                  <code className="text-xs">~/.solana-defi-demo/id.json</code>, or
-                </li>
-                <li>create a throwaway one below, or</li>
-                <li>switch to the browser-wallet backend and reload.</li>
-              </ol>
-            </div>
+            <Stack gap="xs">
+              <Group gap="xs">
+                <KeyRoundIcon size={16} />
+                <Text fw={500} size="sm">
+                  Options
+                </Text>
+              </Group>
+              <List size="sm" c="dimmed" spacing={4}>
+                <List.Item>
+                  Generate a keypair with <Code>solana-keygen new --no-bip39-passphrase</Code> (writes{" "}
+                  <Code>~/.config/solana/id.json</Code>), or
+                </List.Item>
+                <List.Item>
+                  place an existing keypair at <Code>~/.solana-defi-demo/id.json</Code>, or
+                </List.Item>
+                <List.Item>create a throwaway one below, or</List.Item>
+                <List.Item>switch to the browser-wallet backend and reload.</List.Item>
+              </List>
+            </Stack>
           ) : null}
 
           {createError === null ? null : (
-            <p className="text-xs text-negative">Could not create a keypair: {createError}</p>
+            <Text size="xs" c="red">
+              Could not create a keypair: {createError}
+            </Text>
           )}
 
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={onRetry} className="gap-2">
-              <RefreshCwIcon className="size-4" />
+          <Group gap="sm">
+            <Button leftSection={<RefreshCwIcon size={16} />} onClick={onRetry}>
               Retry
             </Button>
 
             {onCreateKeypair === undefined ? null : (
               <Button
-                variant="secondary"
-                className="gap-2"
+                variant="light"
                 disabled={creating}
+                leftSection={
+                  creating ? <Loader size={16} /> : <KeyRoundIcon size={16} />
+                }
                 onClick={() => void handleCreateKeypair()}
               >
-                {creating ? (
-                  <Loader2Icon className="size-4 animate-spin" />
-                ) : (
-                  <KeyRoundIcon className="size-4" />
-                )}
                 Create a demo keypair
               </Button>
             )}
 
             {onUseWallet === undefined ? null : (
-              <Button variant="outline" className="gap-2" onClick={onUseWallet}>
-                <WalletIcon className="size-4" />
+              <Button
+                variant="default"
+                leftSection={<WalletIcon size={16} />}
+                onClick={onUseWallet}
+              >
                 Use browser wallet instead
               </Button>
             )}
-          </div>
-        </CardContent>
+          </Group>
+        </Stack>
       </Card>
-    </div>
+    </Stack>
   );
 }

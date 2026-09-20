@@ -1,19 +1,15 @@
-import { Badge } from "@/components/ui/badge";
+import { Badge } from "@mantine/core";
+
 import { CLUSTERS } from "@/solana/cluster";
 import { useSolanaConfig } from "@/solana/config-context";
 
-/** Shows which cluster the client is bound to, and where it points. */
+/** Shows which cluster the client is bound to. */
 export function NetworkBadge() {
   const { config } = useSolanaConfig();
-  const cluster = CLUSTERS[config.cluster];
 
   return (
-    <Badge variant="outline" className="gap-1.5 font-normal">
-      <span
-        aria-hidden
-        className="size-1.5 rounded-full bg-positive data-[offline=true]:bg-muted-foreground"
-      />
-      {cluster.label}
+    <Badge variant="light" color="teal" visibleFrom="xs">
+      {CLUSTERS[config.cluster].label}
     </Badge>
   );
 }

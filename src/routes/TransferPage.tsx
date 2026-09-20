@@ -1,14 +1,23 @@
-import { getTransferSolInstruction } from "@solana-program/system";
+import {
+  Alert,
+  Anchor,
+  Button,
+  Card,
+  Group,
+  NumberInput,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { notifications } from "@mantine/notifications";
 import { address as toAddress, type Address } from "@solana/kit";
 import { useAction, useClient } from "@solana/react";
+import { getTransferSolInstruction } from "@solana-program/system";
 import { ExternalLinkIcon, Loader2Icon, SendIcon } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useSolBalance } from "@/hooks/useSolBalance";
 import { formatSol, groupDigits, parseSolToLamports, shortenAddress } from "@/lib/format";
 import type { AppClient } from "@/solana/client";
@@ -16,47 +25,65 @@ import { explorerUrl } from "@/solana/cluster";
 import { useSolanaConfig } from "@/solana/config-context";
 import { useSignerInfo } from "@/solana/useSignerInfo";
 
+type TransferValues = { destination: string; amount: number | string };
+
+/**
+ * Converts the amount input into lamports.
+ *
+ * The value can be a number (NumberInput's default) or a string; numbers are
+ * expanded with `toFixed(9)` first so that small values never arrive in exponent
+ * notation (`1e-7`), which the string parser rejects. All arithmetic stays in
+ * BigInt — floats would silently round a transfer amount.
+ */
+function solToLamports(value: number | string): bigint | null {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    return parseSolToLamports(value.toFixed(9));
+  }
+  return parseSolToLamports(value);
+}
+
 export function TransferPage() {
   const client = useClient<AppClient>();
   const { config } = useSolanaConfig();
   const { address, ready } = useSignerInfo();
   const balance = useSolBalance(address);
-
-  const [destination, setDestination] = useState("");
-  const [amount, setAmount] = useState("");
   const [signature, setSignature] = useState<string | null>(null);
 
-  const lamports = parseSolToLamports(amount);
-  const destinationIsValid = (() => {
-    if (destination.trim() === "") return false;
-    try {
-      toAddress(destination.trim());
-      return true;
-    } catch {
-      return false;
-    }
-  })();
+  const available = balance.data?.value ?? null;
 
-  const insufficientFunds =
-    balance.data !== undefined && lamports !== null && lamports > balance.data.value;
-
-  const canSubmit =
-    ready &&
-    address !== null &&
-    destinationIsValid &&
-    lamports !== null &&
-    lamports > 0n &&
-    !insufficientFunds;
+  const form = useForm<TransferValues>({
+    initialValues: { destination: "", amount: "" },
+    validate: {
+      destination: (value) => {
+        if (value.trim() === "") return "Enter a destination address";
+        try {
+          toAddress(value.trim());
+          return null;
+        } catch {
+          return "Not a valid base58 address";
+        }
+      },
+      amount: (value) => {
+        const lamports = solToLamports(value);
+        if (lamports === null || lamports <= 0n) return "Enter an amount greater than 0";
+        if (available !== null && lamports > available) {
+          return "Amount exceeds the available balance";
+        }
+        return null;
+      },
+    },
+  });
 
   /**
    * `useAction` tracks the dispatch through React state and supplies a fresh
    * `AbortSignal` per call, so a double click cannot fire two transfers.
    */
-  const send = useAction(async (_signal, to: Address, value: bigint) => {
+  const send = useAction(async (_signal, destination: Address, lamports: bigint) => {
     const instruction = getTransferSolInstruction({
       source: client.payer,
-      destination: to,
-      amount: value,
+      destination,
+      amount: lamports,
     });
     const result = await client.sendTransaction([instruction]);
     // `sendTransaction` resolves to a transaction-plan result envelope, not a
@@ -65,118 +92,102 @@ export function TransferPage() {
     return result.context.signature;
   });
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    if (lamports === null || !destinationIsValid) return;
+  async function handleSubmit(values: TransferValues) {
+    const lamports = solToLamports(values.amount);
+    if (lamports === null) return;
 
+    const destination = values.destination.trim();
     try {
-      const base58 = await send.dispatchAsync(toAddress(destination.trim()), lamports);
+      const base58 = await send.dispatchAsync(toAddress(destination), lamports);
       setSignature(base58);
-      setAmount("");
-      toast.success("Transfer confirmed", {
-        description: `${formatSol(lamports, 9)} SOL → ${shortenAddress(destination.trim())}`,
+      form.setFieldValue("amount", "");
+      notifications.show({
+        color: "teal",
+        title: "Transfer confirmed",
+        message: `${formatSol(lamports, 9)} SOL → ${shortenAddress(destination)}`,
       });
     } catch (error) {
-      toast.error("Transfer failed", {
-        description: error instanceof Error ? error.message : String(error),
+      notifications.show({
+        color: "red",
+        title: "Transfer failed",
+        message: error instanceof Error ? error.message : String(error),
       });
     }
   }
 
   return (
-    <div className="flex max-w-xl flex-col gap-6">
+    <Stack gap="lg" maw={620}>
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Transfer SOL</h1>
-        <p className="text-sm text-muted-foreground">
+        <Title order={2}>Transfer SOL</Title>
+        <Text size="sm" c="dimmed">
           A System Program transfer, planned and signed by the Kit client.
-        </p>
+        </Text>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recipient</CardTitle>
-          <CardDescription>
-            {address === null
-              ? "Connect a wallet or provide a local keypair to send."
-              : `Available: ${groupDigits(formatSol(balance.data?.value ?? 0n, 4))} SOL`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="destination">Destination address</Label>
-              <Input
-                id="destination"
-                value={destination}
-                onChange={(event) => setDestination(event.target.value)}
-                placeholder="9xQe…7fRt"
-                className="font-mono text-sm"
-                autoComplete="off"
-                spellCheck={false}
-                aria-invalid={destination !== "" && !destinationIsValid}
-              />
-              {destination !== "" && !destinationIsValid ? (
-                <p className="text-xs text-destructive">Not a valid base58 address.</p>
-              ) : null}
-            </div>
+      <Card withBorder padding="lg" radius="md">
+        <form onSubmit={form.onSubmit(handleSubmit)} noValidate>
+          <Stack gap="md">
+            <TextInput
+              label="Destination address"
+              placeholder="9xQe…7fRt"
+              autoComplete="off"
+              spellCheck={false}
+              styles={{ input: { fontFamily: "monospace" } }}
+              {...form.getInputProps("destination")}
+            />
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="amount">Amount (SOL)</Label>
-              <Input
-                id="amount"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-                placeholder="0.1"
-                inputMode="decimal"
-                autoComplete="off"
-                aria-invalid={insufficientFunds}
-              />
-              {amount !== "" && lamports === null ? (
-                <p className="text-xs text-destructive">
-                  Enter a decimal amount with at most 9 fraction digits.
-                </p>
-              ) : null}
-              {insufficientFunds ? (
-                <p className="text-xs text-destructive">Amount exceeds the available balance.</p>
-              ) : null}
-            </div>
+            <NumberInput
+              label="Amount (SOL)"
+              placeholder="0.1"
+              decimalScale={9}
+              allowNegative={false}
+              thousandSeparator=","
+              description={
+                available === null
+                  ? undefined
+                  : `Available: ${groupDigits(formatSol(available, 4))} SOL`
+              }
+              {...form.getInputProps("amount")}
+            />
 
-            <Button type="submit" disabled={!canSubmit || send.isRunning} className="gap-2">
-              {send.isRunning ? (
-                <>
-                  <Loader2Icon className="animate-spin" />
-                  Sending…
-                </>
-              ) : (
-                <>
-                  <SendIcon />
-                  Send {lamports !== null && lamports > 0n ? formatSol(lamports, 4) : ""} SOL
-                </>
-              )}
-            </Button>
+            {ready ? null : (
+              <Alert color="yellow" variant="light">
+                Connect a wallet or provide a local keypair to send.
+              </Alert>
+            )}
 
-          </form>
-        </CardContent>
-      </Card>
-      {signature === null ? null : (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Last transaction</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <a
-              href={explorerUrl(config.cluster, `/tx/${signature}`)}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1.5 break-all font-mono text-xs text-primary hover:underline"
+            <Button
+              type="submit"
+              disabled={!ready || send.isRunning}
+              leftSection={send.isRunning ? <Loader2Icon size={16} /> : <SendIcon size={16} />}
             >
-              {signature}
-              <ExternalLinkIcon className="size-3 shrink-0" />
-            </a>
-          </CardContent>
+              {send.isRunning ? "Sending…" : "Send"}
+            </Button>
+          </Stack>
+        </form>
+      </Card>
+
+      {signature === null ? null : (
+        <Card withBorder padding="md" radius="md">
+          <Text size="xs" c="dimmed" mb={4}>
+            Last transaction
+          </Text>
+          <Anchor
+            href={explorerUrl(config.cluster, `/tx/${signature}`)}
+            target="_blank"
+            rel="noreferrer"
+            size="xs"
+            ff="monospace"
+          >
+            <Group gap={6} wrap="nowrap">
+              <Text size="xs" truncate>
+                {signature}
+              </Text>
+              <ExternalLinkIcon size={12} />
+            </Group>
+          </Anchor>
         </Card>
       )}
-
-    </div>
+    </Stack>
   );
 }
