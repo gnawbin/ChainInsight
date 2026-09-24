@@ -12,7 +12,11 @@ dist
 dist-ssr
 *.local
 
-# Environment files (never commit real RPC keys / secrets)
+# Environment files
+#
+# ⚠️ 这里忽略 `.env` 是因为**任何**写进去的东西都会被 Vite 在构建期内联进 JS 包，
+# 等于发给每一个用户。三个数据源 API Key 一律不进这里 —— 它们存在 Rust 独占的
+# SQLite（`secret` 表）里，由用户在设置页填写。见设计文档 §11.1。
 .env
 .env.*
 !.env.example
@@ -27,7 +31,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-# Local Solana validator ledger (created by `solana-test-validator`, contains keypairs)
-test-ledger/
 

@@ -1,8 +1,8 @@
 [package]
-name = "solana-defi-demo"
+name = "chaininsight"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "ChainInsight AI —— ETH + Solana 双链只读 AI 链上浏览器（Tauri 后端）"
+authors = ["gnawbin"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,7 +11,7 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "solana_defi_demo_lib"
+name = "chaininsight_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -22,13 +22,19 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Local keypair support (see src/keypair.rs). `ed25519-dalek` is deliberately
-# used instead of the far heavier `solana-sdk`, which would dominate build time.
-ed25519-dalek = "2"
-bs58 = "0.5"
-# System randomness for `create_keypair` (already in the tree via tauri).
-getrandom = "0.2"
 
+# ── 迁移时移除的依赖 ────────────────────────────────────────────────────────
+# 原先还有 ed25519-dalek / bs58 / getrandom 三个，只服务于已删除的 src/keypair.rs
+# （本地私钥读入、地址推导、随机生成）。它们提供的是 PRD §8.3 的红线能力，随那个
+# 文件一起删掉了。
+#
+# 特意留这段注释而不是静默删除：**下一次有人想加签名相关依赖时，会先看到这里。**
+# 依赖清单本身就是一道红线 —— scripts/check-redlines.mjs 会扫它。
+
+# 计划中要新增的（见设计文档 §11.6；两者在本地 cargo 缓存里已存在，零下载）：
+#   rusqlite    = { version = "0.32.1", features = ["bundled"] }   # 独占 SQLite
+#   reqwest     = { version = "0.12", features = ["json", "rustls-tls"] }  # 独占出网
+#   sqlite-vec  = "=0.1.9"                                          # 向量检索（精确锁版本）
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
@@ -37,3 +43,4 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+

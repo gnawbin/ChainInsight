@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    solana_defi_demo_lib::run()
+    chaininsight_lib::run()
 }

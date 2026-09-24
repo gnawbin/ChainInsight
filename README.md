@@ -1,248 +1,174 @@
-# Solana DeFi Demo
+# ChainInsight AI
 
-A Tauri 2 desktop app with a React 19 frontend wired to Solana through
-[`@solana/kit`](https://www.solanakit.com) v8 plugin clients.
-
-The interesting part of this project is **the signer abstraction**: the same UI
-runs in a browser (signing with a Wallet Standard extension) and inside the Tauri
-webview (signing with a local Solana CLI keypair), chosen at runtime.
+> ETH + Solana 双链**只读** AI 链上浏览器。
+> Tauri 2 桌面端 · React 19 + Mantine 9 · Rust 后端（独占 SQLite 与出网）
 
 ---
 
-## Stack
+## 这是什么
 
-| Layer | Choice | Version |
-| --- | --- | --- |
-| Shell | Tauri | 2 |
-| UI framework | React + Vite | 19.3 · 8.3 |
-| Language | TypeScript | 7.0 |
-| UI components | Mantine (`core`/`hooks`/`form`/`notifications`/`charts`) | 9.6.1 |
-| Styling pipeline | Mantine CSS + `postcss-preset-mantine` | 1.18 |
-| Solana SDK | `@solana/kit` + plugins | 8.3 · 0.19/0.20 |
-| React bindings | `@solana/react` | 8.3 |
-| Routing | `react-router-dom` (`HashRouter`) | 7.18 |
-| Data cache | `@tanstack/react-query` | 5.103 |
-| Icons / charts backend | `lucide-react` · `recharts` | 1.47 · 3.10 |
+一个把公开链上数据翻译成人类语言的浏览器：查地址、查交易、查合约，自动解析 DeFi 行为，
+并用 AI 生成大白话解读与地址画像。
 
-Web3.js v1 is deliberately **not** used: Kit is browser-native and needs no
-`Buffer`/`process` polyfills in a Vite build.
+## 这**永远不是**什么
 
----
+**只读是产品的核心定位，不是路线图上的一个阶段。**
 
-## Architecture
-
-### The dual-mode signer
-
-Kit's wallet plugin is bound to one chain and one wallet backend, so the client is
-rebuilt whenever the cluster or signer mode changes. Both modes install the wallet
-**state** plugin, which means the UI always has a `client.wallet` to read and never
-has to branch on hooks — only the `payer` / `identity` source differs.
-
-```
-                     ┌──────────────────────────────┐
-browser  ──────────► │ walletSigner()  (Wallet Std) │
-                     └──────────────────────────────┘
-                                 │
-                     ┌───────────▼──────────────────┐
-                     │ createAppClient(config)      │──► ClientProvider ──► UI
-                     └───────────▲──────────────────┘
-                                 │
-                     ┌───────────┴──────────────────┐
-Tauri    ──────────► │ walletWithoutSigner()        │  (state only)
-  shell              │ + signer(local keypair)      │  ← Rust bridge
-                     └──────────────────────────────┘
-```
-
-`src/solana/useSignerInfo.ts` is the single place the UI asks "who can sign?".
-Components consume that hook, because reading `client.payer` directly throws while
-a wallet is disconnected.
-
-### Two desktop signing strategies
-
-`src-tauri/src/keypair.rs` exposes three commands, and the Settings page switches
-between the two strategies:
-
-| Strategy | Commands used | Private key reaches webview? |
-| --- | --- | --- |
-| `local-bytes` (default) | `read_keypair` → `createKeyPairSignerFromBytes()` | **Yes** — convenient, simpler |
-| `rust-signer` (hardened) | `local_address` + `sign_message` | **No** — only the 64-byte signature comes back |
-
-`rust-signer` works because a `TransactionPartialSigner` is handed the compiled
-message bytes, which is exactly the payload that must be signed — so those bytes
-can be shipped to Rust. `src/solana/desktop-signer.ts` implements that interface.
-
-> **Security note.** `read_keypair` accepts a path from the webview, so it
-> canonicalises the path and requires it to live under `~/.config/solana` or
-> `~/.solana-defi-demo`. Without that allowlist the command would be an
-> arbitrary-file-read primitive reachable from any XSS in the webview. Unit tests
-> cover this (`pnpm test:rust`).
-
-### UI layer
-
-Everything visual comes from **Mantine 9** — there is no second styling system:
-
-| Concern | Solution |
+| 永久不做 | 原因 |
 | --- | --- |
-| Providers | `MantineProvider` (`defaultColorScheme="dark"`, `teal` accent) in `main.tsx` |
-| Layout | Mantine's `AppShell` — the collapsible navbar is built in, so there is no separate mobile navigation |
-| Forms | `@mantine/form` (`useForm` + `validate`); `TransferPage` validates address and amount this way |
-| Amount input | `NumberInput` (built on `react-number-format`): `decimalScale={9}`, `thousandSeparator` |
-| Feedback | `@mantine/notifications` (`notifications.show`) |
-| Theme toggle | `useMantineColorScheme` — Mantine persists the choice itself |
-| Icons | `lucide-react` (Mantine is icon-library agnostic) |
+| 私钥 / 助记词导入与存储 | 产品不接触任何密钥材料 |
+| 钱包连接 | 没有这个代码路径 |
+| 交易签名、广播、转账 | 无写链能力 |
+| 投资建议、价格预测 | AI 输出经 `guard` 后置校验 |
+| 把地址与现实身份绑定 | 不接任何身份/征信数据源 |
 
-`postcss.config.cjs` is required by Mantine (`postcss-preset-mantine` plus the
-breakpoint variables). Tailwind was **removed** during the Mantine migration
-rather than run alongside it, so there is exactly one styling system.
+这些不是「暂未实现」，而是**架构上不存在对应的代码路径** —— 并且由
+`scripts/check-redlines.mjs` 扫描源码、构建产物与**两侧**依赖清单（`package.json` +
+`Cargo.toml`）来强制。详见设计文档 §1.2 与 §10。
 
-> **Cost of that choice, measured:** the production bundle went from 40 KB CSS /
-> 548 KB JS (Tailwind + hand-written shadcn primitives) to **249 KB CSS /
-> 737 KB JS** — 36 KB / 226 KB gzipped. Mantine ships a complete stylesheet
-> instead of generating only the classes in use. For a Tauri app these are local
-> files, so the trade is convenience for byte count.
+**你不需要注册本软件，也不需要连接钱包。** 唯一需要自备的是三个数据源 API Key
+（Helius / Etherscan / AI）。它们只存在你本机的 SQLite 里，由 Rust 独占读写，前端拿不到明文。
 
 ---
 
-## Getting started
+## 当前状态
 
-```sh
+诚实地说：**这是骨架，不是可用的产品。**
+
+| 部分 | 状态 |
+| --- | --- |
+| 只读重构（删掉签名面） | ✅ 16 个文件已删，两侧依赖已清 |
+| 13 条路由 + 应用外壳 + 免责声明页脚 + 演示数据横幅 | ✅ 可点击、可导航 |
+| 链识别引擎（EVM / Solana 地址与交易哈希） | ✅ 29 个用例 |
+| 合规强制（红线扫描 + 免责声明 hash 锁） | ✅ 进 `pnpm verify` |
+| **真实数据接入** | ❌ 未开始（Rust 的 DB 与出网层都还没写） |
+| **各页内容** | ❌ 目前是规格占位卡（指向设计文档章节） |
+| **AI 层** | ❌ 未开始 |
+
+无密钥时产品进入**演示数据模式**，页面顶部有不可关闭的黄色横幅标明「当前展示的是内置样本数据」。
+
+---
+
+## 快速开始
+
+```bash
 pnpm install
-
-# Browser (wallet extensions work here) — http://localhost:1420
-pnpm dev
-
-# Desktop shell — needs a local keypair first, see below
-pnpm tauri dev
-
-# Production build
-pnpm build
+pnpm dev            # 浏览器 http://localhost:1420（纯前端，无 Tauri 命令）
+pnpm tauri dev      # 桌面壳（首次编译 Rust 约 1–3 分钟）
 ```
 
-### Desktop mode requires a keypair
+> `pnpm dev` 只跑前端。窗口标题、系统集成、SQLite、出网代理都需要 `pnpm tauri dev`。
 
-The Tauri build signs with a local Solana CLI keypair. Without one, the client
-cannot be built and the app shows a recovery screen (see
-[When the client cannot start](#when-the-client-cannot-start)):
+### 验收：一条命令，两个语言域
 
-```sh
-solana-keygen new --no-bip39-passphrase   # writes ~/.config/solana/id.json
+```bash
+pnpm verify
+# = typecheck && test && build && check:rust && check:redlines
 ```
 
-The keypair is looked up in this order, the CLI location winning when both exist:
-
-1. `~/.config/solana/id.json` — what `solana-keygen` writes
-2. `~/.solana-defi-demo/id.json` — where the app's own **Create a demo keypair**
-   button writes
-
-### Running against a local cluster
-
-`.env` / `.env.local` (see `.env.example`):
-
-```sh
-VITE_SOLANA_CLUSTER=local          # devnet | local
-# VITE_SOLANA_RPC_URL=http://127.0.0.1:8899
-# VITE_SOLANA_WS_URL=ws://127.0.0.1:8900
-```
-
-Then start a validator:
-
-```sh
-solana-test-validator --reset      # or: surfpool start
-```
-
-Only `VITE_`-prefixed values are inlined into the bundle — **never put secrets in
-`.env`**, they ship to the client.
-
-### Dev-only overrides
-
-The signer backend and the shell can be forced with query parameters. These are
-compiled out of production builds (`import.meta.env.DEV`):
-
-| URL | Effect |
-| --- | --- |
-| `/?mode=desktop` | Use the local-keypair backend inside a plain browser |
-| `/?mode=wallet` | Use the browser-wallet backend even inside Tauri |
-| `/?shell=tauri` | Pretend the host is Tauri, so Tauri-only UI renders |
-
-`?mode=desktop` in a browser makes the Tauri commands fail, which reproduces the
-desktop failure path — that is how the recovery screen is regression-tested
-without building the Tauri app.
-
-### When the client cannot start
-
-If the Kit client fails to build, the app shows a recovery screen instead of a
-blank window — with the underlying error, **Retry**, **Use browser wallet
-instead**, and (inside Tauri) **Create a demo keypair**.
-
-The blank window was a real bug: a rejected async client surfaces as a *render
-error* from `ClientProvider`, and with no error boundary React unmounts the whole
-root. `src/components/ErrorBoundary.tsx` is what prevents that, so any failure
-stays visible instead of emptying the window.
+`pnpm verify` 的存在有具体原因：**项目曾只验前端就宣布通过，于是 `lib.rs` 里留了两个重复的
+`pub fn run()` 而无人发现**，直到手动 `pnpm tauri dev` 报 `E0428`。复盘见设计文档 §3.6 E/F。
 
 ---
 
-## Scripts
+## 脚本
 
-| Command | What it does |
+| 命令 | 作用 |
 | --- | --- |
-| `pnpm dev` | Vite dev server on port 1420 |
-| `pnpm tauri dev` | Desktop shell with hot reload |
-| `pnpm build` | `tsc` then production bundle into `dist/` |
+| `pnpm dev` | Vite 开发服务器（纯前端） |
+| `pnpm tauri dev` | 桌面壳 + 热重载 |
+| `pnpm build` | `tsc` + 生产构建到 `dist/` |
+| `pnpm verify` | **两个语言域的 5 道关卡**（见上） |
 | `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm smoke` | In-process Solana smoke test against LiteSVM — no network needed |
-| `pnpm test:rust` | Rust unit tests for the keypair commands |
-
-`pnpm smoke` (see `scripts/smoke-kit.mjs`) is the fastest way to confirm the Solana
-layer still works. It builds a client with the same plugin ordering as
-`src/solana/client.ts`, airdrops, sends a System Program transfer, asserts the
-balance moved, then repeats the send with a bare `TransactionPartialSigner` to
-cover the hardened desktop path.
-
-> Note: `client.sendTransaction(...)` resolves to a **transaction-plan result
-> envelope**, not a bare signature. For a single-instruction plan the base58
-> signature is at `result.context.signature`.
+| `pnpm test` | Vitest（链识别 + 免责声明 hash 锁） |
+| `pnpm check:rust` | `cargo check`（快，不改产物） |
+| `pnpm check:redlines` | 红线扫描；加 `--self-test` 验证扫描器本身有效 |
+| `pnpm test:rust` | `cargo test --lib`（目前无测试） |
 
 ---
 
-## Layout
+## 技术栈
+
+| 层 | 选择 | 版本 |
+| --- | --- | --- |
+| 桌面壳 | Tauri | 2 |
+| UI | React + Vite | 19.3 · 8.3 |
+| 语言 | TypeScript（前端）/ Rust（后端） | 7.0 · 1.98 |
+| 组件 | Mantine（`core`/`hooks`/`form`/`notifications`/`charts`） | 9.6.1 |
+| 样式管线 | Mantine CSS + `postcss-preset-mantine` | — |
+| 路由 | `react-router-dom`（`HashRouter`） | 7.18 |
+| 测试 | Vitest + Testing Library + jsdom | 5.0.1 · 16.3 · 26 |
+| 数据库 | SQLite（`rusqlite` bundled + `sqlite-vec`）· **待接入** | — |
+
+**为什么是 `HashRouter`**：打包后的 Tauri 用自定义协议提供前端，`/address/...` 这类路径深链
+不会被重写到 `index.html`，所以任何非根路由刷新都会 404。
+
+**为什么前端不直连数据源**：Helius 的鉴权是 URL query string（`?api-key=`）。若请求由前端发出，
+前端就必须持有明文密钥，「密钥不进 webview」的承诺当场失效。所以出网统一收敛到 Rust 的传输层
+（走 IPC，**不起 HTTP 服务器**）。
+
+---
+
+## 架构
+
+```
+┌─ WebView：全部业务逻辑（TS）────────────────────────────────┐
+│  routes/ · components/ · chains/（链识别）                    │
+│  defi/（行为归一化）· ai/（证据包 / prompt / guard / report）  │
+└──────────┬───────────────────────────────────────────────────┘
+           │ Tauri IPC
+┌──────────▼─ Rust（只做两件 TS 做不到的事）───────────────────┐
+│  db/     独占 SQLite（schema.sql 已就位；mod.rs / migrate.rs 待写）│
+│  proxy/  独占出网（注入密钥 · host 白名单 · 限流退避 · 日志脱敏）│
+└───────────────────────────────────────────────────────────────┘
+```
+
+**Rust 不写业务逻辑** —— `normalize` / `evidence` / `guard` / `report` 全在 TS。它只负责让密钥
+不离开 Rust，以及让所有出网经过一个可审计的点。
+
+更详细的取舍（为什么不启 Axum、为什么不用 SurrealDB、为什么缓存由前端驱动）见设计文档 §3。
+
+---
+
+## 目录
 
 ```
 src/
-├── solana/
-│   ├── client.ts           # createAppClient() + AppClient type
-│   ├── cluster.ts          # cluster config, chain ids, explorer links
-│   ├── signer.ts           # signer mode detection + plugin factories
-│   ├── desktop-signer.ts   # TransactionPartialSigner backed by Rust
-│   ├── config-context.ts   # cluster/mode context
-│   ├── SolanaProvider.tsx  # ClientProvider + QueryClientProvider + Suspense
-│   └── useSignerInfo.ts    # single source of truth for "who signs?"
+├── api/                     IPC 入口（tauri-specta 生成，待接入）
+├── chains/detect.ts         链识别引擎（纯函数，29 用例）
 ├── components/
-│   ├── layout/             # AppShell, NetworkBadge, ThemeToggle
-│   ├── wallet/             # WalletButton
-│   ├── ClientErrorScreen.tsx
-│   └── ErrorBoundary.tsx   # keeps failures visible instead of blanking
-├── routes/                 # Dashboard, Transfer, Settings
-├── hooks/                  # useSolBalance
-└── lib/                    # env, format (BigInt-safe)
-postcss.config.cjs          # required by Mantine
-scripts/smoke-kit.mjs
-src-tauri/src/keypair.rs
+│   ├── compliance/          免责声明页脚（hash 锁定）
+│   ├── layout/              AppShell · PageHeader · ChainBadge · ProviderStatus
+│   └── common/              规格占位卡
+├── hooks/useAppStatus.ts    数据源状态 + 演示模式判定
+├── lib/                     disclaimer（冻结文案）· strings（品牌名唯一落点）· format · env
+└── routes/                  13 条路由（见设计文档 §8.1）
+src-tauri/
+├── src/db/schema.sql        13 张表的完整 DDL（已执行验证：26 语句 / 32 约束用例）
+├── src/lib.rs               目前为空 —— 刻意如此
+└── .gitignore               gen/ 整目录忽略（46 MB 生成物）
+scripts/check-redlines.mjs   红线扫描（含 --self-test）
 ```
 
 ---
 
-## Known gaps / next steps
+## 文档
 
-- The repo demonstrates **read paths plus a System Program transfer**. A swap or
-  lending flow is the natural next feature. Jupiter's quote API is the
-  smallest-dependency option; an Anchor program under `programs/` is the other
-  (the toolchain — `anchor-cli 1.1.2`, `solana-cli 3.1.10`, Surfpool — is present).
-- The JS bundle is a single ~737 kB chunk. Split routes with `React.lazy` before
-  adding larger feature pages.
-- `tauri.conf.json` still has `"csp": null`. When tightening it, keep
-  `style-src 'unsafe-inline'`: Mantine injects CSS custom properties inline.
-- Wallet persistence uses a namespaced `localStorage` key
-  (`solana-defi-demo:wallet`) through the wallet plugin's `storageKey` option.
-- `@mantine/charts` is installed (and its stylesheet imported) but no chart is
-  rendered yet — it is wired up for the first TVL/price view.
+| 文档 | 内容 |
+| --- | --- |
+| **[`docs/chaininsight-design.md`](docs/chaininsight-design.md)** | **单一设计文档**：架构 · 数据模型 · IPC 契约 · 页面逐字段规格 · AI 层 · 合规可执行规范 · 测试与 CI · 实施规划 · 风险登记 · 决策记录 |
+| [`docs/PRD.md`](docs/PRD.md) | 产品需求原文（含合规章节） |
+| [`docs/android.md`](docs/android.md) | Android 构建 playbook（历史 trace，命名已过时） |
+| [`docs/architecture-review.md`](docs/architecture-review.md) | 迁移前对签名器架构的评审（其测试选型矩阵仍被采纳） |
+
+---
+
+## 许可
+
+[Apache License 2.0](LICENSE)
+
+---
+
+> 本工具仅用于区块链公开数据查询、解析与学术研究参考，不构成任何投资、金融、法律建议。
+> 完整免责声明见 [`src/lib/disclaimer.ts`](src/lib/disclaimer.ts) —— 冻结文案，改一个标点就会让测试失败。
 
